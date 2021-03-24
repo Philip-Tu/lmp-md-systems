@@ -63,34 +63,32 @@ def compare_rdf_pmf(num_bin, cutoff, pmf_distr, paths, plot_title, png_name, y_l
         plt.savefig(fig_dir + '/' + png_name + '.png', dpi=400, bbox_inches='tight')
 
 
-def calc_pmf_distr(file_path, num_bin, cutoff, lx, ly, mol=False):
-    """ An encapsulating function that calculates and plots the potential of mean force (PMF) between a pair of
-    passive (WCA) particles suspended in a bath of active dumbbells across their intermolecular distance in the
-    interparticle/parallel as well as the transverse directions. Sign convention used is: 1) a positive interparticle
+def calc_force_distribution(file_path, num_bin, cutoff, lx, ly, mol=False):
+    """ Calculates the effective force decompositions between any pair of particles/atoms based on their position and force data and
+    averages the forces according to pre-defined bins of interparticular distance.
+    
+    Force decompositions are in the interparticle/parallel and transverse directions. Sign convention is: 1) a positive interparticle
     force is effective "repulsion" and 2) a positive transverse force represents effective "rotation" in the
-    counterclockwise direction. This function is capable of both reading and processing data to generate desired
-    plots.
+    counterclockwise direction.
 
-    @param FILE_PATH: A string representing the path from the CWD of this notebook to the position-force file to be parsed.
-    @param NUM_BIN: An integer value denoting the desired number of bins.
-    @param CUTOFF: A numerical value denoting the upperbound (in appropriate units) of the histogram/of the last bin.
-    @param LX: Length of the simulation box in x direction.
-    @param LY: Length of the simulation box in y direction.
-    @param MOL: A boolean indicating whether or not the subject of the calculated distribution are molecules (as opposed to
-        individual atoms/particles). Default to False.
+    This function is capable of both reading and processing the position and force data.
 
-    @return: Two 1-D arrays that bins parallel and tranverse forces, respectively, as a function of distance r that is
-    ready to be plotted using matplotlib. The distribution(s) will be displayed but not saved for convenience.
 
     Args:
-        file_path (TYPE): Description
-        num_bin (TYPE): Description
-        cutoff (TYPE): Description
-        lx (TYPE): Description
-        ly (TYPE): Description
+        file_path (string): RELATIVE path to the file containing position-force data.
+        num_bin (int): desired number of bins for the distributions of pair-wise force w.r.t. inter-particle distance.
+        cutoff (float): upperbound (in appropriate units) of the force distribution (i.e. of the last bin).
+        lx (float): length of the simulation box in x direction.
+        ly (float): length of the simulation box in y direction.
+        mol (bool): whether or not the particles (whose position and force data are recorded) belong to molecules (as opposed
+        to being individual particles themselves). Default to False.
 
     Returns:
-        TYPE: Description
+        dict: distribution of force decompositions and their corresponding bins:
+            "bins": 1-D numpy array with each entry denoting lower/upper bound for each bin.
+            "parallel forces": 1-D numpy array representing the average parallel force between any particle pair in each bin.
+            "transverse forces": 1-D numpy array representing the average transverse force between any particle pair in each bin.
+
     """
     paral_dict = {}
     trans_dict = {}
@@ -127,14 +125,14 @@ def calc_pmf_distr(file_path, num_bin, cutoff, lx, ly, mol=False):
             ft_avg = np.average(arrt)
             trans_arr[bin_label] = ft_avg
 
-    # make and output plots for parallel and tranverse forces but does NOT save them
-    x_ax = np.linspace(0, cutoff, num_bin)
-    plt.figure(0)
-    plt.plot(x_ax, paral_arr)
-    plt.figure(1)
-    plt.plot(x_ax, trans_arr)
+    bins = np.linspace(0, cutoff, num_bin)
 
-    return paral_arr, trans_arr
+    force_dict = {}
+    force_dict["bins"] = bins
+    force_dict["parallel forces"] = paral_arr
+    force_dict["transverse forces"] = trans_arr
+
+    return force_dict
 
 
 def read_pos_force(file_path):
