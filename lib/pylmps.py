@@ -2,6 +2,8 @@
 
 import re
 import os
+import json
+import pandas as pd
 
 def change_var_value(input_file, var, new_val):
 	""" Changes the corresponding value of a variable in a lammps .in file.
@@ -49,3 +51,51 @@ def run_sim(file_name, sim_dir, lmp_path):
 	os.chdir(sim_dir)
 	os.system('mpirun -np 4 ' + lmp_path + ' -in ' + file_name)
 	os.chdir(cwd)
+
+
+def read_json_to_dict(file_path, params=True):
+	""" Reads a JSON file to Python dictionary.
+	
+	Args:
+		file_path (str): absolute/relative path to the .json file.
+		params (bool): whether or not the parsed file is params.json.
+			If True: the file is structured like a simple Python dict.
+			If False: the file encodes a pandas DataFrame and is most
+				likely a product of calling pylmps.str_array_dict_to_json
+				or pandas.DataFrame.to_json.
+			
+			Defaults to True.
+	
+	Returns:
+		dict: Python dictionary equivalent of the json file with format:
+			<variable> (str): <value> (float or numpy array)
+	"""
+	if params:
+		with open(file_path, "r") as file:
+			output_dict = json.load(file)
+	else:
+		df = pd.read_json(path_or_buf=file_path)
+		output_dict = df.to_dict(orient='list')
+
+	return output_dict
+
+
+def str_array_dict_to_json(str_arr_dict, to_file_path):
+	""" Saves a Python dictionary with the format <str: numpy array> to disk
+	as a .json file.
+	
+	All values (numpy arrays) of the dictionary are assumed to have the same size
+	as each array represents one column in the underlying dataframe encoded by the
+	passed-in Python dictionary.
+	
+	Args:
+		str_arr_dict (dict): data stored in the form of a Python dictionary with
+			the key-value pairs structured as followed:
+				<variable/column name> (str): <values/entries> (1-D numpy array)
+		to_file_path (str): absolute/relative path to the file where the Python
+			dictionary will be written to disk in JSON format. Should end with ".json".
+	Returns:
+		None: output written to file.
+	"""
+	df = pd.DataFrame.from_dict(str_arr_dict)
+	df.to_json(to_file_path)
