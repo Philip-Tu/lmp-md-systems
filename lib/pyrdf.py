@@ -134,7 +134,10 @@ def make_rdf_from_arr(rdf_arr, plot_title, label=""):
     plt.show()
 
 def c_rdf_file_to_array(file_path):
-    """ Read RDF data from .rdf file into a numpy array. It is assumed that there are four columns
+    """ @deprecated, but used by other functions in `pyrdf` module. Use
+    `read_rdf_arrays` instead.
+
+    Read RDF data from .rdf file into a numpy array. It is assumed that there are four columns
     in the .rdf file, that the same file records time-averaged, cumulative RDF data, and that data
     entries start on Line 5 of the file.
     @param FILE_PATH: A string representing the path from the CWD of this notebook to the .rdf
