@@ -129,32 +129,111 @@ def read_rdf_arrays(file_path, num_bin=100, cumul=True):
 	return r_arr, rdf_arr
 
 
-def read_passive_temp(temp_file_path):
-	""" Read system temperature from file.
+def read_multiple_files(average, *args, **kwargs):
+    """ Read RDFs from multiple files into one numpy array.
+    
+    All notes and assumptions for `read_rdf_arrays` apply.
+    
+    The different RDFs will be 'vertically stacked' when parsing through the
+    multiple files.
+    
+    It is also assumed that the formats (i.e. `num_bin` and `cumul` arguments
+    of `read_rdf_arrays`) of all files are the same.
+    
+    Parameters
+    ----------
+    average : bool
+        Whether or not an average along the zeroth dimension of the final array
+        (i.e. an average among the different RDFs) will be taken.
+    
+    *args : iterable of str
+        Paths to files each containing RDF data.
+    
+    **kwargs : dictionary of keyword-value pairs
+        Keyworded arguments to `read_rdf_arrays`; specifically, `num_bin` and
+        `cumul`.
+        
+        For `read_rdf_arrays`, `num_bin` defaults to 100 and `cumul` defaults
+        to True.
+    
+    
+    Returns
+    -------
+    A numpy array:
+        If `average`=True:
+            1-D array of one RDF that is the result of taking an average across
+            all RDFs stored in the multiple files.
+        
+        otherwise:
+            2-D array with each, separate RDF spanning its first dimension (and
+            therefore a different RDF at each position along the zeroth.)
+    """
+    num_bin_is_set = 'num_bin' in kwargs
+    if num_bin_is_set:
+        num_bin = kwargs['num_bin']
+    
+    cumul_is_set = 'cumul' in kwargs
+    if cumul_is_set:
+        cumul = kwargs['cumul']
+    
+    first_pass = True
 
-	Targeted file should be properly formatted, specifically it should be an
-	output from calling compute temp in lammps.
+    for path in args:
+        if num_bin_is_set:
+            if cumul_is_set:
+                _, curr_rdf = read_rdf_arrays(path, num_bin=num_bin, cumul=cumul)
+            else:
+                _, curr_rdf = read_rdf_arrays(path, num_bin=num_bin)
+        else:
+            if cumul_is_set:
+                _, curr_rdf = read_rdf_arrays(path, cumul=cumul)
+            else:
+                _, curr_rdf = read_rdf_arrays(path)
+        
+        if first_pass:
+            rdfs = curr_rdf
+            first_pass = False
+        else:
+            rdfs = np.vstack((rdfs, curr_rdf))
+    
+    if average:
+        return np.mean(rdfs, axis=0)
+    return rdfs
+
+
+def plot_rdf(cutoff, num_bin, rdf, plot_title=None):
+	""" Plot a single radial distribution function from numpy array.
 
 	Parameters
 	----------
-	temp_file_path : str
-		Path to file with system temperature printout.
+	cutoff : int
+		Maximum `r` at which the rdf is calculated (typically set in lammps).
+
+	num_bin : int
+		Number of bins used to compute the RDF.
+
+	rdf : 1-D numpy array
+		RDF, g(r), at each bin spanning across `r` until r=`cutoff`.
+
+	plot_title : str
+		Title for RDF plot.
+
+		Default to None, i.e. no plot title is displayed.
 
 
 	Returns
 	-------
-	A float:
-		The system temperature.
+	None.
+		RDF is plotted when function is called in jupyter notebook environment.
 	"""
-	file = open(temp_file_path, 'r')
-	file_rows = file.readlines()
-	temp_row = file_rows[2]
-	temp_row = temp_row.rstrip('\n')
-	row_split = re.split(r'\s', temp_row)
-	temp = float(row_split[1])
-	file.close()
-
-	return temp
+	r = np.linspace(0, cutoff, num_bin)
+	plt.plot(r, rdf)
+	plt.xlabel("r")
+	plt.ylabel("g(r)")
+	if plot_title is not None:
+		plt.title(plot_title)
+	plt.axhline(y=1, ls='--', c='k')
+	plt.show()
 
 
 def plot_rdf_convergence(Nfreq, at_bin, rdfs, refline_shift=2, **kwargs):
@@ -172,8 +251,8 @@ def plot_rdf_convergence(Nfreq, at_bin, rdfs, refline_shift=2, **kwargs):
 	rdfs : 2-D numpy array
 		Scan of RDF across simulation time.
 
-		Should be (or match in format with) an output of read_rdf_arrays
-		when cumul=False.
+		Should be (or match in format with) an output of `read_rdf_arrays` or
+		`read_multiple_files` when cumul=False.
 
 	refline_shift : float
 		Hyperparameter that shifts the reference line up (larger value) or down
@@ -263,6 +342,7 @@ def calc_running_abs_error(at_bin, rdfs):
 	return scans, running_abs_error
 
 
+
 def make_overlaid_plots(paths, labels, title, save_path=''):
 	""" Overlay multiple rdf curves in one properly formatted plot.
 
@@ -295,43 +375,6 @@ def make_overlaid_plots(paths, labels, title, save_path=''):
 
 	if save_path != '':
 		plt.savefig(save_path, dpi=400, bbox_inches='tight')
-
-
-def make_rdf_from_arr(rdf_arr, plot_title, label=""):
-	""" Generate a RDF plot using RDF data passed in as an argument. This function (so far) is designed
-	solely for data visualization (i.e. resulting figures will not be exported as .png high quality images)
-
-	@param RDF_ARR: A 2-D array consisted of 4 columns of RDF data; This array should closely
-		follow the format of the array generated by c_rdf_file_to_array.
-	@param PLOT_TITLE: A string specifying the title of the RDF plot.
-	@param LABEL: A string encoding the legend label that the RDF plot should be labeled with; defaults to no label.
-
-	@return A single RDF line plot generated using RDF_ARR with title PLOT_TITLE.
-	"""
-	# Extract compute_rdf parameters
-	num_bin = len(rdf_arr)
-	bin_width = rdf_arr[0][1] * 2
-
-	# rdf_cutoff = num_bin * bin_width    # cutoff distance for c_rdf
-
-	# Plot rdf as a line plot
-	rdf_r = np.empty(num_bin)
-	rdf_density = np.empty(num_bin)
-
-	for i in range(num_bin):
-		rdf_r[i] = rdf_arr[i][1]
-		rdf_density[i] = rdf_arr[i][2]
-
-	if label != "":
-		plt.plot(rdf_r, rdf_density, label=label)
-		plt.legend()
-	else:
-		plt.plot(rdf_r, rdf_density)
-	plt.xlabel("r")
-	plt.ylabel("g(r)")
-	plt.title(plot_title)
-	plt.axhline(y=1, ls='--', c='k')
-	plt.show()
 
 
 def write_force_temp_pair(force_temp_dict, force_temp_file_path):
